@@ -47,14 +47,14 @@ const DESKTOP_UPLOAD_CREDENTIAL_ENV_NAMES = new Set([
 const AUTOMATIC_BUILD_VERSION = 'auto'
 
 /** Fixed platform and architecture identifiers exposed by package scripts. */
-export type DesktopPackageTargetName = 'mac-arm64' | 'mac-x64' | 'win-x64'
+export type DesktopPackageTargetName = 'mac-arm64' | 'mac-x64' | 'win-x64' | 'linux-x64'
 
 /** One supported release target and its electron-builder selectors. */
 export interface DesktopPackageTarget {
   readonly name: DesktopPackageTargetName
-  readonly platform: 'darwin' | 'win32'
+  readonly platform: 'darwin' | 'win32' | 'linux'
   readonly arch: 'arm64' | 'x64'
-  readonly builderPlatform: '--mac' | '--win'
+  readonly builderPlatform: '--mac' | '--win' | '--linux'
   readonly builderArch: '--arm64' | '--x64'
 }
 
@@ -71,6 +71,13 @@ const TARGETS: Record<DesktopPackageTargetName, DesktopPackageTarget> = {
     platform: 'darwin',
     arch: 'x64',
     builderPlatform: '--mac',
+    builderArch: '--x64',
+  },
+  'linux-x64': {
+    name: 'linux-x64',
+    platform: 'linux',
+    arch: 'x64',
+    builderPlatform: '--linux',
     builderArch: '--x64',
   },
   'win-x64': {
@@ -145,16 +152,16 @@ function writeReleaseRecord(
   }
   const buildVersion = resolveDesktopBuildVersion(environment, dshVersion)
   const packaged = resolveDesktopBuildCommit(environment)
-  const update = resolveDesktopAutoUpdateConfig(environment, target.platform, target.arch)
+  const update = target.platform === 'linux' ? undefined : resolveDesktopAutoUpdateConfig(environment, target.platform, target.arch)
   const recordPath = join(artifactsRoot, desktopBuildRecordFilename(target.name))
   const temporaryPath = `${recordPath}.tmp`
   writeFileSync(temporaryPath, `${JSON.stringify({
     schemaVersion: 1,
     target: target.name,
     version: buildVersion,
-    environment: update.environment,
-    channel: update.channel,
-    publicUrl: update.publicUrl,
+    environment: update?.environment ?? 'local',
+    channel: update?.channel ?? 'nightly',
+    publicUrl: update?.publicUrl ?? '',
     // Upload reads this to tag the commit a production release was packaged from.
     ...packaged === undefined ? {} : { commit: packaged.commit, dirty: packaged.dirty },
   }, null, 2)}\n`)
@@ -182,6 +189,9 @@ export function resolveDesktopPackageTarget(
   }
   if (target.platform === 'darwin' && hostPlatform !== 'darwin') {
     throw new Error(`desktop package: ${name} requires a macOS build host`)
+  }
+  if (name === 'linux-x64' && (hostPlatform !== 'linux' || hostArch !== 'x64')) {
+    throw new Error('desktop package: linux-x64 requires a Linux x64 build host')
   }
   if (name === 'mac-arm64' && hostArch !== 'arm64') {
     throw new Error('desktop package: mac-arm64 requires an Apple Silicon build host')
@@ -238,7 +248,7 @@ export function parseDesktopPackageInvocation(
   if (positionals.length > 1) throw new Error('desktop package: expected at most one target')
   const name = positionals[0] ?? hostTargetName(hostPlatform, hostArch)
   if (values.unsigned && values['prepare-only']) throw new Error('desktop package: --unsigned cannot use --prepare-only')
-  if (values['skip-notarization'] && (name === 'win-x64' || values.unsigned || values['prepare-only'])) {
+  if (values['skip-notarization'] && ((name === 'win-x64' || name === 'linux-x64') || values.unsigned || values['prepare-only'])) {
     throw new Error('desktop package: --skip-notarization requires a signed macOS build, without --prepare-only')
   }
   const requestedBuildVersion = values['build-version']?.trim()
@@ -343,7 +353,7 @@ async function main(): Promise<void> {
   if (invocation.skipNotarization) {
     process.stdout.write('desktop package: skipping notarization and stapling; internal debugging only, not qualified for distribution or update publishing\n')
   }
-  const environment = target.platform === 'darwin' && invocation.unsigned
+  const environment = (target.platform === 'darwin' || target.platform === 'linux') && invocation.unsigned
     ? localMacOSPackageEnvironment()
     : loadDesktopPackageEnvironment(target.platform, process.env, APP_ROOT, {
       unsigned: invocation.unsigned, prepareOnly: invocation.prepareOnly,
