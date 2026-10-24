@@ -90,3 +90,10 @@ describe('desktop build version discovery', () => {
       .resolves.toBe(`${PRERELEASE}.${DATE}.3`)
   })
 })
+
+it('numbers local Linux artifacts without querying a release deployment', async () => {
+  const artifactsRoot = await artifactsWith([`deepseek-harness-${PRERELEASE}.${DATE}.4-linux-x64-unsigned.AppImage`])
+  await expect(suggestDesktopBuildVersion({ productVersion: PRERELEASE, target: 'linux-x64',
+    environment: { DSH_DESKTOP_AUTO_UPDATE_ENV: 'production' }, date: DATE, artifactsRoot }))
+    .resolves.toBe(`${PRERELEASE}.${DATE}.5`)
+})

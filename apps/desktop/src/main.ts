@@ -24,6 +24,7 @@ import {
 } from 'electron'
 import { resolveDesktopPaths } from './paths.ts'
 import { DesktopProjectManager } from './project-manager.ts'
+import { desktopHostExecutable } from './host-executable.ts'
 import { DesktopHostFatalError, DesktopHostProcess, DesktopHostUncleanExitError } from './host-process.ts'
 import { DesktopPlatformView, PLATFORM_IPC, platformBounds } from './platform-view.ts'
 import { installDesktopFileDrag } from './file-drag.ts'
@@ -154,13 +155,14 @@ interface RuntimeResources {
 
 function runtimeResources(): RuntimeResources {
   const development = !app.isPackaged
-  const node = process.execPath
+  const primary = development ? developmentPrimaryRuntime() : join(process.resourcesPath, 'runtime', 'primary-runtime')
+  const node = desktopHostExecutable(process.execPath, primary, process.platform)
   const nodeBin = development ? join(app.getAppPath(), 'scripts', 'node-bin') : join(process.resourcesPath, 'runtime', 'bin')
   const pnpm = (development ? process.env.DSH_DESKTOP_PNPM_ENTRY : undefined)
     ?? (development ? join(app.getAppPath(), 'node_modules', 'pnpm', 'bin', 'pnpm.mjs')
       : join(process.resourcesPath, 'runtime', 'primary-runtime', 'dependencies', 'pnpm', 'bin', 'pnpm.mjs'))
   const dsh = (development ? process.env.DSH_DESKTOP_DSH_DIR : undefined)
-    ?? (development ? join(app.getAppPath(), '.desktop-build', 'development', 'project') : join(app.getAppPath(), 'dsh'))
+    ?? (development ? join(app.getAppPath(), '.desktop-build', 'development', 'project') : process.platform === 'linux' ? join(process.resourcesPath, 'app.asar.unpacked', 'dsh') : join(app.getAppPath(), 'dsh'))
   return { node, nodeBin, pnpm, dsh }
 }
 
@@ -229,6 +231,9 @@ function createWindow(preload: string, show = false, primary = false): BrowserWi
       // 'followWindow' washes the sidebar out behind an unfocused window.
       visualEffectState: 'active' as const,
       backgroundColor: '#00000000',
+    } : {}),
+    ...(process.platform === 'linux' ? {
+      icon: app.isPackaged ? join(process.resourcesPath, 'icon.png') : join(app.getAppPath(), 'resources', 'icon-windows.png'),
     } : {}),
     webPreferences: {
       preload,
@@ -463,7 +468,7 @@ async function main(): Promise<void> {
     return next.promise
   }
   const platformView = new DesktopPlatformView(join(app.getAppPath(), 'lib', 'preload-platform-account.cjs'),
-    () => locale.id === 'zh-CN' ? 'zh_CN' : 'en_US', process.platform === 'win32' ? 'win32' : 'darwin',
+    () => locale.id === 'zh-CN' ? 'zh_CN' : 'en_US', process.platform === 'win32' ? 'win32' : process.platform === 'darwin' ? 'darwin' : null,
     owner => isMandatory() || updateOverlays.input(owner).blocked)
   const backend = new DesktopBackendController((onFailure) => {
     const hostInspectPort = developmentHostInspectPort(development)

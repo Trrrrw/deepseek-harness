@@ -464,6 +464,15 @@ afterEach(async () => {
 })
 
 describe('desktop main startup', () => {
+  it('uses bundled Node and unpacked dependencies for the Linux Host', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
+    await readyForUpdate()
+    expect(harness.hosts[0]).toMatchObject({
+      node: join('desktop-test-resources', 'runtime', 'primary-runtime', 'dependencies', 'node', 'bin', 'node'),
+      runtime: join('desktop-test-resources', 'app.asar.unpacked', 'dsh'),
+    })
+  })
+
   it.each([true, false])('selects the package manager before Host startup (packaged=%s)', async (packaged) => {
     harness.app.isPackaged = packaged
     await readyForUpdate()
@@ -863,6 +872,7 @@ describe('desktop main startup', () => {
     } else {
       expect(window.options).not.toHaveProperty('titleBarStyle')
       expect(window.options).not.toHaveProperty('vibrancy')
+      expect(window.options).toHaveProperty('icon', join(process.resourcesPath, 'icon.png'))
     }
     expect(harness.hosts).toHaveLength(0)
   })

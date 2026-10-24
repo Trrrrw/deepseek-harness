@@ -15,11 +15,13 @@ const artifacts = desktopArtifactOutput(paths, { unsigned: values.unsigned, skip
 const linux = target === 'linux-x64'
 const application = windows ? join(artifacts, 'win-unpacked')
   : linux ? join(artifacts, 'linux-unpacked')
-  : join(artifacts, target === 'mac-arm64' ? 'mac-arm64' : 'mac', 'DeepSeek Harness.app', 'Contents')
+    : join(artifacts, target === 'mac-arm64' ? 'mac-arm64' : 'mac', 'DeepSeek Harness.app', 'Contents')
 const resources = join(application, windows || linux ? 'resources' : 'Resources')
 const executable = windows ? join(application, 'DeepSeek Harness.exe')
-  : linux ? join(application, 'deepseek-harness') : join(application, 'MacOS', 'DeepSeek Harness')
-const descriptor = await verifyDesktopRuntime(paths.dsh, readDesktopRuntime(paths.dsh).release.version,
+  : linux ? join(resources, 'runtime', 'primary-runtime', 'dependencies', 'node', 'bin', 'node') : join(application, 'MacOS', 'DeepSeek Harness')
+const runtimeRoot = join(resources, linux ? 'app.asar.unpacked' : 'app.asar', 'dsh')
+const descriptorRoot = linux ? runtimeRoot : paths.dsh
+const descriptor = await verifyDesktopRuntime(descriptorRoot, readDesktopRuntime(descriptorRoot).release.version,
   resolveDesktopPackageTarget(target))
 if (windows && !values.unsigned) await verifyWindowsCode(application)
-await smokePreparedRuntime(join(resources, 'app.asar', 'dsh'), executable, join(resources, 'runtime'), descriptor)
+await smokePreparedRuntime(runtimeRoot, executable, join(resources, 'runtime'), descriptor)

@@ -10,7 +10,7 @@ import {
 } from './desktop-auto-update-environment.mjs'
 import { desktopArtifactOutput, desktopTargetBuildPaths } from './desktop-build-paths.mjs'
 import { packageMacOSArtifacts, type DesktopPrepackagedArtifact } from './package-macos.ts'
-import { loadDesktopPackageEnvironment, localMacOSPackageEnvironment, validateDesktopPackageEnvironment } from './desktop-package-environment.mjs'
+import { loadDesktopPackageEnvironment, localUnsignedPackageEnvironment, validateDesktopPackageEnvironment } from './desktop-package-environment.mjs'
 import { createPackagingRun, recordPackagingEvent } from './packaging-run.mjs'
 import { withWindowsSigningStage } from './windows-signing-stage.mjs'
 import { prepareWindowsSignatureCacheDirectory, resolveWindowsSignatureCacheDirectory } from './windows-signature-cache-directory.mjs'
@@ -146,6 +146,7 @@ function writeReleaseRecord(
   environment: NodeJS.ProcessEnv,
   artifactsRoot: string,
 ): void {
+  if (target.name === 'linux-x64') throw new Error('desktop package: Linux packages have no release record')
   const desktopVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
   const dshVersion = packageVersion(join(REPOSITORY_ROOT, 'package.json'), 'dsh package')
   if (desktopVersion !== dshVersion) {
@@ -153,16 +154,16 @@ function writeReleaseRecord(
   }
   const buildVersion = resolveDesktopBuildVersion(environment, dshVersion)
   const packaged = resolveDesktopBuildCommit(environment)
-  const update = target.platform === 'linux' ? undefined : resolveDesktopAutoUpdateConfig(environment, target.platform, target.arch)
+  const update = resolveDesktopAutoUpdateConfig(environment, target.platform, target.arch)
   const recordPath = join(artifactsRoot, desktopBuildRecordFilename(target.name))
   const temporaryPath = `${recordPath}.tmp`
   writeFileSync(temporaryPath, `${JSON.stringify({
     schemaVersion: 1,
     target: target.name,
     version: buildVersion,
-    environment: update?.environment ?? 'local',
-    channel: update?.channel ?? 'nightly',
-    publicUrl: update?.publicUrl ?? '',
+    environment: update.environment,
+    channel: update.channel,
+    publicUrl: update.publicUrl,
     // Upload reads this to tag the commit a production release was packaged from.
     ...packaged === undefined ? {} : { commit: packaged.commit, dirty: packaged.dirty },
   }, null, 2)}\n`)
@@ -248,6 +249,7 @@ export function parseDesktopPackageInvocation(
   })
   if (positionals.length > 1) throw new Error('desktop package: expected at most one target')
   const name = positionals[0] ?? hostTargetName(hostPlatform, hostArch)
+  if (name === 'linux-x64' && !values.unsigned) throw new Error('desktop package: Linux builds require --unsigned; release publishing is unavailable')
   if (values.unsigned && values['prepare-only']) throw new Error('desktop package: --unsigned cannot use --prepare-only')
   if (values['skip-notarization'] && ((name === 'win-x64' || name === 'linux-x64') || values.unsigned || values['prepare-only'])) {
     throw new Error('desktop package: --skip-notarization requires a signed macOS build, without --prepare-only')
@@ -355,7 +357,7 @@ async function main(): Promise<void> {
     process.stdout.write('desktop package: skipping notarization and stapling; internal debugging only, not qualified for distribution or update publishing\n')
   }
   const environment = (target.platform === 'darwin' || target.platform === 'linux') && invocation.unsigned
-    ? localMacOSPackageEnvironment()
+    ? localUnsignedPackageEnvironment()
     : loadDesktopPackageEnvironment(target.platform, process.env, APP_ROOT, {
       unsigned: invocation.unsigned, prepareOnly: invocation.prepareOnly,
     })
@@ -437,8 +439,8 @@ export async function packageTarget(
   const packConcurrency = mac?.packConcurrency ?? resolveWindowsPackageSettings(environment).packConcurrency
   const packArguments = ['--concurrency', String(packConcurrency)]
   const buildPaths = desktopTargetBuildPaths(target.name, environment)
-  const releaseRecordPath = join(buildPaths.artifacts, desktopBuildRecordFilename(target.name))
-  if (!invocation.prepareOnly && !invocation.unsigned && !invocation.skipNotarization) {
+  if (target.name !== 'linux-x64' && !invocation.prepareOnly && !invocation.unsigned && !invocation.skipNotarization) {
+    const releaseRecordPath = join(buildPaths.artifacts, desktopBuildRecordFilename(target.name))
     rmSync(releaseRecordPath, { force: true })
     rmSync(`${releaseRecordPath}.tmp`, { force: true })
   }

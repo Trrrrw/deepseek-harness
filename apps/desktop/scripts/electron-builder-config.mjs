@@ -77,6 +77,7 @@ export function createElectronBuilderConfig(
   let windowsCode = []
   const unpack = ['**/*.{node,dylib,dll,so,exe}', '**/*.so.*', '**/spawn-helper', '**/@vscode/ripgrep-*/bin/rg',
     `**/node_modules/@deepseek-ai/libreoffice-kit-${resolvedPlatform}-${resolvedArch}/**/*`]
+  if (resolvedPlatform === 'linux') unpack.push('**/dsh/**/*')
   const windowsSigner = packagesWindows && !unsigned
     ? createWindowsTokenSigner({
         certificateFile: env.DSH_DESKTOP_WINDOWS_CER_FILE,
@@ -109,6 +110,7 @@ export function createElectronBuilderConfig(
     protocols: [{ name: 'DeepSeek Harness', schemes: ['dsh'] }],
     extraMetadata: {
       dshDesktopAppId: appId,
+      ...(resolvedPlatform === 'linux' ? { desktopName: `${appId}.desktop` } : {}),
       dshDesktopUpdateChannel: update?.channel ?? 'nightly',
       ...(policy === undefined ? {} : { dshMandatoryUpdatePolicy: policy }),
       ...buildVersion === productVersion ? {} : { version: buildVersion },
@@ -207,7 +209,7 @@ export function createElectronBuilderConfig(
       }
       // The bundled runtime declares whichever version prepared it: the product version for an ordinary
       // release, and a rewritten one for installed-update qualification.
-      await verifyDesktopRuntime(buildPaths.dsh,
+      await verifyDesktopRuntime(resolvedPlatform === 'linux' ? join(resourcesDir, 'app.asar.unpacked', 'dsh') : buildPaths.dsh,
         preparedRuntimeVersion ?? productVersion, { platform: resolvedPlatform, arch: resolvedArch })
       // Unsigned Windows builds skip electron-builder's afterSign hook.
       if (packagesWindows && unsigned) await verifyWindowsAsarUnpack(buildPaths.dsh, resourcesDir, windowsCode)
@@ -252,9 +254,14 @@ export function createElectronBuilderConfig(
       target: ['nsis'],
     },
     linux: {
+      executableName: 'deepseek-harness',
+      syncDesktopName: true,
+      maintainer: 'DeepSeek Harness contributors',
+      icon: fileURLToPath(new URL('../resources/icon-windows.png', import.meta.url)),
       category: 'Development',
       target: ['AppImage', 'rpm'],
     },
+    rpm: { packageName: 'deepseek-harness' },
     nsis: {
       uninstallDisplayName: '${productName}',
       installerSidebar: join(buildPaths.root, 'installer-ui', 'uninstaller-sidebar.bmp'),

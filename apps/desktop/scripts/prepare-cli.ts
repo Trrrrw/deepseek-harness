@@ -12,6 +12,6 @@ export function prepareDesktopCli(destination: string, platform: 'darwin' | 'win
   const name = platform === 'win32' ? 'dsh.cmd' : 'dsh'
   const command = join(destination, 'bin', name)
   mkdirSync(join(destination, 'bin'), { recursive: true })
-  copyFileSync(join(import.meta.dirname, '..', 'cli', name), command)
+  copyFileSync(join(import.meta.dirname, '..', 'cli', platform === 'linux' ? 'dsh-linux' : name), command)
   if (platform !== 'win32') chmodSync(command, 0o755)
 }

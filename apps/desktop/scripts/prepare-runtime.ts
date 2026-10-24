@@ -65,12 +65,13 @@ async function main(): Promise<void> {
     nodeVersion = await prepareElectron(target)
     await preparePrimary()
   }
-  const { pnpm } = await readPrimaryRuntime(join(RUNTIME_ROOT, 'primary-runtime'))
+  const { pnpm, node } = await readPrimaryRuntime(join(RUNTIME_ROOT, 'primary-runtime'))
+  if (node === undefined) throw new Error('desktop runtime: primary-runtime manifest has no Node version')
   if (pnpm === undefined) throw new Error('desktop runtime: primary-runtime manifest has no pnpm version')
   await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'prepare:cli', async () => { prepareCli(target) })
   writeFileSync(join(RUNTIME_ROOT, 'versions.json'), `${JSON.stringify({
     schemaVersion: 1,
-    node: nodeVersion,
+    node: target.platform === 'linux' ? node : nodeVersion,
     pnpm,
   }, undefined, 2)}\n`)
 }
