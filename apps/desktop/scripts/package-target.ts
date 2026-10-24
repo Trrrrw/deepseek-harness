@@ -20,6 +20,7 @@ import { packagingErrorDetails, packagingStep } from './packaging-step.mjs'
 import { notarizeMacOS } from './notarize-macos.mjs'
 import { resolveMacOSNotarizationEnvironment } from './desktop-release-environment.mjs'
 import { DESKTOP_BUILD_VERSION_ENV, resolveDesktopBuildVersion, validateDesktopBuildVersion } from './desktop-build-version.mjs'
+import { linuxReleaseVersionParts } from './linux-release-config.mjs'
 import { suggestDesktopBuildVersion } from './desktop-build-version-discovery.ts'
 import { desktopBuildCommitEnvironment, readDesktopBuildCommit, resolveDesktopBuildCommit } from './desktop-build-commit.mjs'
 import { requireDesktopToolchain } from './desktop-toolchain-preflight.ts'
@@ -331,14 +332,31 @@ function runPnpm(
  * @param environment - Release settings, which name the bucket automatic numbering reads.
  * @returns The product version, the requested version, or the next free index for today.
  */
+/**
+ * Validate the version one run publishes against the rule its target follows.
+ * @param target - Selected package target.
+ * @param version - Requested build version.
+ * @param productVersion - Upstream version the manifests declare.
+ * @returns The normalized build version.
+ * @throws When the version does not extend the product version the target's rule requires.
+ */
+function validateTargetBuildVersion(target: DesktopPackageTarget, version: string, productVersion: string): string {
+  if (target.name === 'linux-x64') {
+    // A Linux release names the upstream version plus this fork's packaging revision.
+    linuxReleaseVersionParts(version, productVersion)
+    return version
+  }
+  return validateDesktopBuildVersion(version, productVersion)
+}
+
 async function resolveRequestedBuildVersion(
   invocation: DesktopPackageInvocation,
   productVersion: string,
   environment: NodeJS.ProcessEnv,
 ): Promise<string> {
-  const requested = invocation.requestedBuildVersion
-  if (requested === undefined) return productVersion
-  if (requested !== AUTOMATIC_BUILD_VERSION) return validateDesktopBuildVersion(requested, productVersion)
+  const requested = invocation.requestedBuildVersion ?? environment[DESKTOP_BUILD_VERSION_ENV]?.trim()
+  if (requested === undefined || requested === '') return productVersion
+  if (requested !== AUTOMATIC_BUILD_VERSION) return validateTargetBuildVersion(invocation.target, requested, productVersion)
   const paths = desktopTargetBuildPaths(invocation.target.name)
   return suggestDesktopBuildVersion({
     productVersion, target: invocation.target.name,
@@ -362,7 +380,8 @@ async function main(): Promise<void> {
     })
   const productVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
   // Release settings come from the selected configuration files, so the version this run publishes is an
-  // argument; the environment variable below only carries it to the child processes that build.
+  // argument or the explicit release version of a fork workflow; the variable below carries the result to
+  // the child processes that build.
   const buildVersion = await resolveRequestedBuildVersion(invocation, productVersion, environment)
   environment[DESKTOP_BUILD_VERSION_ENV] = buildVersion
   if (invocation.check) {
