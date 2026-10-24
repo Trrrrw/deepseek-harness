@@ -45,12 +45,12 @@ afterEach(() => {
   state.views.length = 0; state.sessions.length = 0; state.loadFailure = undefined; state.loadBarrier = undefined
   vi.clearAllMocks(); vi.unstubAllEnvs()
 })
-function setup() {
+function setup(platform: 'darwin' | 'win32' | null = 'darwin') {
   const removeChildView = vi.fn()
   const owner = Object.assign(new EventEmitter(), {
     webContents: new EventEmitter(), contentView: { addChildView: vi.fn(), removeChildView }, isDestroyed: () => false,
   })
-  const manager = new DesktopPlatformView('/bundled/preload.cjs', () => 'en_US', 'darwin')
+  const manager = new DesktopPlatformView('/bundled/preload.cjs', () => 'en_US', platform)
   manager.setSession({ origin: 'https://platform.deepseek.com', userId: 'fixture-user' as AccountUserId, token: 'fixture-secret' })
   return { manager, owner, removeChildView }
 }
@@ -489,4 +489,11 @@ it('keeps an open temporary document when its credential gains a stable identity
   await manager.open(owner, 'usage', bounds)
   expect(browserSession().partition).toMatch(/^persist:/)
   await manager.dispose()
+})
+it('uses the Web account protocol when the operating system has no native Platform identifier', async () => {
+  const { manager, owner } = setup(null)
+  try {
+    await manager.open(owner, 'usage', bounds)
+    expect(interceptHeaders(1, 'https://platform.deepseek.com/usage', {})).toMatchObject({ 'x-client-platform': 'web' })
+  } finally { await manager.dispose() }
 })
