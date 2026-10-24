@@ -16,3 +16,11 @@ it('assembles local Linux packages without macOS or Windows release settings', (
   expect(config.directories.output).toContain('unsigned-artifacts')
   expect(() => loadDesktopPackageEnvironment('linux', {}, '/absent-checkout')).toThrow(/require --unsigned/u)
 })
+
+it('embeds the public fork feed in Linux release builds without upstream update policy', () => {
+  const env = loadDesktopPackageEnvironment('linux', { DSH_DESKTOP_LINUX_RELEASE: '1' }, '/absent-checkout', { unsigned: true })
+  const config = createElectronBuilderConfig(env, 'linux', 'x64')
+  expect(config.publish).toEqual([{ provider: 'github', owner: 'Trrrrw', repo: 'deepseek-harness',
+    channel: 'nightly', releaseType: 'release' }])
+  expect(config.extraMetadata).not.toHaveProperty('dshMandatoryUpdatePolicy')
+})

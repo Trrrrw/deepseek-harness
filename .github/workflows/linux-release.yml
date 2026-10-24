@@ -1,0 +1,126 @@
+name: Release Linux desktop
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Linux 版本号：留空使用仓库版本，也可填写该版本的构建后缀'
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-desktop-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository == 'Trrrrw/deepseek-harness'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      commit: ${{ steps.version.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@v5.0.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install Linux build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm libcrypt1 libgtk-3-0t64 libnss3 libnotify4 libxss1 libxtst6 libasound2t64 libgbm1 xvfb xauth
+      - run: pnpm install --frozen-lockfile
+      - name: Resolve release version
+        id: version
+        env:
+          LINUX_RELEASE_VERSION: ${{ inputs.version }}
+        run: pnpm exec tsx apps/desktop/scripts/linux-release.ts prepare
+      - name: Check Linux release behavior
+        run: >-
+          pnpm exec vitest run
+          apps/desktop/tests/linux-packaging.spec.ts
+          apps/desktop/tests/linux-release.spec.ts
+          apps/desktop/tests/linux-release-workflow.spec.ts
+          apps/desktop/tests/linux-updater-selection.spec.ts
+          apps/desktop/tests/update-coordinator.spec.ts
+          apps/desktop/tests/update-channel.spec.ts
+      - name: Build Linux installers and verify their runtime
+        env:
+          DSH_DESKTOP_LINUX_RELEASE: '1'
+          DSH_DESKTOP_BUILD_VERSION: ${{ steps.version.outputs.version }}
+          DSH_TELEMETRY_DISABLED: '1'
+        run: pnpm run package:desktop:linux:x64
+      - name: Qualify Linux update downloads
+        run: xvfb-run -a node apps/desktop/scripts/test-linux-updater.mjs
+      - name: Verify release assets
+        env:
+          LINUX_RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          LINUX_RELEASE_DIRECTORY: apps/desktop/.desktop-build/targets/linux-x64/unsigned-artifacts
+        run: pnpm exec tsx apps/desktop/scripts/linux-release.ts verify
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: linux-release
+          if-no-files-found: error
+          path: |
+            apps/desktop/.desktop-build/targets/linux-x64/unsigned-artifacts/*.AppImage
+            apps/desktop/.desktop-build/targets/linux-x64/unsigned-artifacts/*.rpm
+            apps/desktop/.desktop-build/targets/linux-x64/unsigned-artifacts/nightly-linux.yml
+            apps/desktop/.desktop-build/targets/linux-x64/unsigned-artifacts/SHA256SUMS
+
+  publish:
+    needs: build
+    if: github.repository == 'Trrrrw/deepseek-harness'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: linux-release
+          path: release
+      - name: Verify transferred assets
+        working-directory: release
+        run: sha256sum --check SHA256SUMS
+      - name: Publish complete Linux release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.build.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+          SOURCE_COMMIT: ${{ needs.build.outputs.commit }}
+        run: |
+          cat > release-notes.md <<'NOTES'
+          Linux x86_64 desktop installers.
+
+          - AppImage: run directly after granting executable permission
+          - RPM: install through the system package manager
+          - Updates: application menu → Check for Updates
+          - SHA256SUMS: installer and update metadata checksums
+          NOTES
+          # A failed upload leaves a draft. Re-running only this job replaces that draft;
+          # a published release is never overwritten by a newer build of the same version.
+          existing=$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft 2>/dev/null) || existing=absent
+          case "$existing" in
+            absent) ;;
+            true) gh release delete "$RELEASE_TAG" --yes --cleanup-tag=false ;;
+            *)
+              echo "::error::Release $RELEASE_TAG is already published. Publish a new version instead"
+              exit 1
+              ;;
+          esac
+          gh release create "$RELEASE_TAG" --target "$SOURCE_COMMIT" --title "Linux $RELEASE_VERSION" --notes-file release-notes.md --draft
+          gh release upload "$RELEASE_TAG" release/*.AppImage release/*.rpm release/nightly-linux.yml release/SHA256SUMS
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest

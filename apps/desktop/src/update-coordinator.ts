@@ -9,7 +9,9 @@ import type { DesktopUpdateState } from './ipc.ts'
 import { DesktopUpdateHttpExecutor } from './update-http-executor.ts'
 import { DesktopUpdatePreparationError } from './update-error.ts'
 
-const { autoUpdater } = electronUpdater
+// APPIMAGE identifies the running carrier even when a reused package tree contains RPM metadata.
+const autoUpdater = process.platform === 'linux' && process.env.APPIMAGE
+  ? new electronUpdater.AppImageUpdater() : electronUpdater.autoUpdater
 
 /** Owns one updater target until its download and installation settle. */
 export class DesktopUpdateCoordinator {
@@ -47,6 +49,7 @@ export class DesktopUpdateCoordinator {
    * @param currentVersion - Actual installed application version.
    * @param channel - Installed package channel; omitted test/local callers retain nightly.
    * @param downloadResult - Once per completed download attempt, including platform preparation failures.
+   * @param allowPrerelease - Whether the provider includes GitHub prereleases, independent of version suffixes.
    */
   constructor(
     private readonly publish: (state: DesktopUpdateState) => DesktopUpdateState,
@@ -56,6 +59,7 @@ export class DesktopUpdateCoordinator {
     private readonly currentVersion: () => string = () => app.getVersion(),
     private readonly downloadResult?: (success: boolean, reason?: string) => void,
     private readonly channel: 'nightly' | 'latest' = 'nightly',
+    allowPrerelease = channel === 'nightly',
   ) {
     if (updater === autoUpdater) {
       // electron-updater omits this internal transport property from its public declarations.
@@ -69,7 +73,7 @@ export class DesktopUpdateCoordinator {
     this.updater.autoDownload = false
     this.updater.autoInstallOnAppQuit = false
     this.updater.channel = channel
-    this.updater.allowPrerelease = channel === 'nightly'
+    this.updater.allowPrerelease = allowPrerelease
     // Selecting a channel can enable downgrade in electron-updater.
     this.updater.allowDowngrade = false
     this.updater.on('download-progress', this.onProgress)

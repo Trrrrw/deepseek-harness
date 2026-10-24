@@ -1,3 +1,4 @@
+import type { LinuxReleaseConfig } from './scripts/linux-release-config.mjs'
 import type { AfterPackContext, BeforePackContext } from 'app-builder-lib'
 
 /** Electron-builder fields asserted by the Desktop release tests. */
@@ -68,7 +69,7 @@ export interface DesktopElectronBuilderConfig {
   readonly afterPack: (context: AfterPackContext) => Promise<void>
   readonly afterSign: (context: AfterPackContext) => Promise<void>
   readonly artifactBuildCompleted: (artifact: { readonly file: string }) => Promise<void> | undefined
-  readonly publish: readonly [{ readonly provider: 'generic', readonly url: string }] | null
+  readonly publish: readonly [{ readonly provider: 'generic', readonly url: string }] | readonly [LinuxReleaseConfig] | null
 }
 
 /**

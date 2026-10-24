@@ -47,7 +47,7 @@ describe('desktop release metadata', () => {
 const coordinators: InstanceType<typeof DesktopUpdateCoordinator>[] = []
 afterEach(() => { for (const item of coordinators.splice(0)) item.dispose() })
 
-function fixture(channel: 'nightly' | 'latest' = 'nightly', version = '1.1.0-alpha.1') {
+function fixture(channel: 'nightly' | 'latest' = 'nightly', version = '1.1.0-alpha.1', allowPrerelease = channel === 'nightly') {
   const events = new EventEmitter()
   const checkForUpdates = vi.fn(async () => ({
     isUpdateAvailable: true,
@@ -66,7 +66,7 @@ function fixture(channel: 'nightly' | 'latest' = 'nightly', version = '1.1.0-alp
   const updater = Object.assign(events, { checkForUpdates, downloadUpdate, quitAndInstall }) as unknown as AppUpdater
   const coordinator = new DesktopUpdateCoordinator(
     (state) => { states.push(state); return state },
-    beforeRestart, updater, () => true, () => version, downloadResult, channel,
+    beforeRestart, updater, () => true, () => version, downloadResult, channel, allowPrerelease,
   )
   coordinators.push(coordinator)
   return { coordinator, updater, events, states, checkForUpdates, downloadUpdate, quitAndInstall, beforeRestart, downloadResult }
@@ -256,4 +256,13 @@ it('keeps a stable-version nightly installation on nightly and rejects prereleas
   expect(latest.updater.allowDowngrade).toBe(false)
   expect((await latest.coordinator.check()).phase).toBe('error')
   expect(latest.downloadUpdate).not.toHaveBeenCalled()
+})
+
+it('follows published GitHub releases while accepting upstream rc version suffixes', async () => {
+  const f = fixture('nightly', '1.1.0-rc.1', false)
+  expect(f.updater.allowPrerelease).toBe(false)
+  expect(f.updater.allowDowngrade).toBe(false)
+  expect(await f.coordinator.check()).toEqual({ phase: 'available', version: '1.1.0-rc.2' })
+  f.checkForUpdates.mockResolvedValue({ isUpdateAvailable: true, updateInfo: { version: '1.1.0' } })
+  expect(await f.coordinator.check()).toEqual({ phase: 'available', version: '1.1.0' })
 })

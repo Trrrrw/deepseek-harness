@@ -1,5 +1,6 @@
 /** Select local test defaults or platform release settings without changing the caller's environment. */
 
+import { linuxReleaseConfig } from './linux-release-config.mjs'
 import { accessSync, constants, readFileSync, statSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -158,6 +159,7 @@ function requireReadableFile(environment, name) {
  */
 export function validateDesktopPackageEnvironment(environment, target, options = {}) {
   resolveDesktopTargetBuildPaths(environment, target.platform, target.arch)
+  linuxReleaseConfig(environment, target.platform)
   if (target.platform === 'linux' && !options.unsigned) throw new Error('desktop package: Linux builds require --unsigned')
   resolveDesktopAppId(environment)
   resolveNpmRegistry(environment)
