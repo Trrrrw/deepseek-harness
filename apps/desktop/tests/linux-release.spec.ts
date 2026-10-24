@@ -105,7 +105,17 @@ it('refuses a revision that was already released for this upstream version', asy
   const { root, git } = await repository()
   git('tag', `dsh-v${productVersion}`)
   git('tag', 'v0.2.1-rc.3-linux.2')
+  await writeFile(join(root, 'change.txt'), 'next build\n')
+  git('add', 'change.txt')
+  git('commit', '--quiet', '-m', 'next build')
   expect(() => verifyLinuxReleaseSource(version, productVersion, root)).toThrow(/was not published after v0\.2\.1-rc\.3-linux\.2/u)
+})
+
+it('accepts the revision whose tag points at the commit being published', async () => {
+  const { root, git } = await repository()
+  git('tag', `dsh-v${productVersion}`)
+  git('tag', 'v0.2.1-rc.3-linux.1')
+  expect(verifyLinuxReleaseSource(version, productVersion, root)).toBe(git('rev-parse', 'HEAD'))
 })
 
 it('refuses to publish without the upstream release tag in the repository', async () => {

@@ -109,6 +109,9 @@ export function verifyLinuxReleaseSource(version: string, productVersion: string
   const prefix = `v${productVersion}-linux.`
   const released = execFileSync('git', ['tag', '-l', `${prefix}*`], { encoding: 'utf8', cwd }).split('\n').filter(Boolean)
   for (const tag of released) {
+    const tagCommit = execFileSync('git', ['rev-parse', `${tag}^{commit}`], { encoding: 'utf8', cwd }).trim()
+    // The tag this run publishes points at the checked-out commit and is not an earlier release.
+    if (tagCommit === checkedOut) continue
     const published = linuxReleaseVersionParts(tag.slice(1), productVersion).revision
     if (published >= revision) {
       throw new Error(`Linux release: revision ${String(revision)} was not published after ${tag}`)
