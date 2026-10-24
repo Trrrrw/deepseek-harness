@@ -45,7 +45,7 @@ pnpm run package:desktop:linux:x64
 
 发布流程先创建草稿，上传全部文件，再把该 Release 设为公开、非 prerelease 的 latest。上传失败会留下该草稿，重跑失败的发布 job 会替换它；已发布的版本不会被覆盖，重新构建需要新的打包序号。
 
-发布版本由官方产品版本与本 fork 的打包序号组成，例如 `0.2.1-rc.3-linux.1`，标签是该版本加 `v` 前缀。`prepare` 会拒绝已被发布过的序号，也会拒绝不包含官方标签 `dsh-v<产品版本>` 的构建，因此版本号总能指出所构建的官方发布。发布时把该官方标签合并进本分支，并把官方标签一并推送。`master` 只镜像官方仓库，本分支在其上承载 Linux 改动，每次官方切版以合并标签的方式引入，所有发布标签都从这里打出。`DSH_DESKTOP_LINUX_RELEASE=1 DSH_DESKTOP_BUILD_VERSION=<版本> pnpm run package:desktop:linux:x64` 可在本地复现发布包，未设置或设为 `0` 则得到不带更新源的测试包；其他取值，或在其他平台使用该开关，会打包失败。
+发布版本由官方产品版本与本 fork 的打包序号组成，例如 `0.2.1-rc.3-linux.1`，标签是该版本加 `v` 前缀。`prepare` 会拒绝已被发布过的序号，也会拒绝不包含官方标签 `dsh-v<产品版本>` 的构建，因此版本号总能指出所构建的官方发布。发布时把该官方标签合并进本分支；工作流会在解析版本之前从官方仓库获取官方标签，本地运行需要先执行 `git fetch upstream --tags`。`master` 只镜像官方仓库，本分支在其上承载 Linux 改动，每次官方切版以合并标签的方式引入，所有发布标签都从这里打出。`DSH_DESKTOP_LINUX_RELEASE=1 DSH_DESKTOP_BUILD_VERSION=<版本> pnpm run package:desktop:linux:x64` 可在本地复现发布包，未设置或设为 `0` 则得到不带更新源的测试包；其他取值，或在其他平台使用该开关，会打包失败。
 
 `LINUX_RELEASE_VERSION=<version> LINUX_RELEASE_DIRECTORY=<directory> pnpm exec tsx apps/desktop/scripts/linux-release.ts verify` 会按元数据核对产物目录，包括确切的大小与 SHA-512 摘要，并写出其中的 `SHA256SUMS`。`pnpm --filter @deepseek-ai/dsh-desktop run test:updates:linux` 针对一个回环地址上的更新源验证真实 Electron 更新传输，其安装包字节是惰性内容，安装动作只被记录而不执行。
 

@@ -45,6 +45,10 @@ jobs:
           # Ubuntu 24.04 restricts unprivileged user namespaces. Chromium's sandbox needs them, and
           # running without the sandbox is not an acceptable qualification shortcut.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Fetch the upstream release tags
+        run: >-
+          git fetch --no-tags https://github.com/deepseek-ai/deepseek-harness.git
+          '+refs/tags/dsh-v*:refs/tags/dsh-v*'
       - run: pnpm install --frozen-lockfile
       - name: Resolve release version
         id: version

@@ -25,6 +25,7 @@ it('publishes Linux assets only after a read-only build and checksum transfer', 
   expect(workflow.jobs.build?.if).toBe("github.repository == 'Trrrrw/deepseek-harness'")
   expect(workflow.jobs.publish).toMatchObject({ needs: 'build', permissions: { contents: 'write' } })
   expect(source).toContain('sha256sum --check SHA256SUMS')
+  expect(source).toContain('+refs/tags/dsh-v*:refs/tags/dsh-v*')
   expect(source).toContain('release/*.AppImage release/*.rpm release/nightly-linux.yml release/SHA256SUMS')
   expect(source).toContain('--draft=false --prerelease=false --latest')
   expect(source).toContain('gh release delete "$RELEASE_TAG" --yes --cleanup-tag=false')
