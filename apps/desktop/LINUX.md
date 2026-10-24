@@ -59,4 +59,6 @@ Account requests use the existing Web protocol identifier because the Platform p
 
 The application inherits the desktop session language unless a language preference has been saved. A terminal or automation process with `LC_ALL=C.UTF-8` requests English even when the desktop session uses Chinese.
 
+Chromium's sandbox needs unprivileged user namespaces. A system policy that restricts them, such as Ubuntu 24.04's AppArmor default, must allow the application instead; the application never runs without its sandbox, and the release workflow lifts that restriction on its own runner before it launches Electron.
+
 Fedora with niri/Wayland is the primary qualification environment. Replacing an installed AppImage or RPM through the update flow, in-place installation through a package manager, desktop integration, input methods, file dialogs, browser sign-in, and a real model round require separate runtime qualification. Releases and their update feed exist only in this fork's GitHub repository.
